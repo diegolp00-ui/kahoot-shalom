@@ -1,39 +1,26 @@
 /**
- * RealtimeManager: Capa de transporte en tiempo real para Kahoot Shalom
- * Soporta Supabase Realtime Broadcast (para multijugador por Internet / Vercel)
- * y BroadcastChannel (para pruebas locales y fallback instantáneo).
+ * RealtimeManager: Capa de transporte en tiempo real para Kahoot Shalom 2026
+ * Utiliza MQTT sobre WebSockets Seguros (WSS) mediante un broker público en la nube (EMQX WSS).
+ * - 100% GRATIS, sin registrar cuentas, sin tarjetas de crédito y sin planes PRO.
+ * - Conexión instantánea y cifrada (TLS).
+ * - Soporta reconexión automática y fallback a BroadcastChannel para pruebas locales.
  */
 class ShalomRealtime {
   constructor() {
-    this.client = null;
-    this.channel = null;
+    this.brokerHost = 'broker.emqx.io';
+    this.brokerPort = 8084; // Puerto seguro WSS
+    this.brokerPath = '/mqtt';
+    this.pahoClient = null;
     this.bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('shalom_kahoot_realtime') : null;
     this.isHost = false;
     this.currentPin = '';
     this.onStatus = null;
-    this.initSupabaseClient();
+    this.isConnected = false;
   }
 
-  initSupabaseClient() {
-    const config = window.SHALOM_CONFIG;
-    if (config && config.hasSupabase() && window.supabase && typeof window.supabase.createClient === 'function') {
-      try {
-        this.client = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
-          realtime: {
-            params: {
-              eventsPerSecond: 20
-            }
-          }
-        });
-      } catch (err) {
-        console.warn('Error inicializando cliente Supabase:', err);
-        this.client = null;
-      }
-    }
-  }
-
-  hasCloudRealtime() {
-    return Boolean(this.client);
+  // Helper para generar ID único de cliente
+  generateClientId(prefix = 'client') {
+    return prefix + '_' + Math.random().toString(36).slice(2, 9) + '_' + Date.now().toString(36);
   }
 
   // ================= PANEL ANFITRIÓN =================
@@ -42,7 +29,7 @@ class ShalomRealtime {
     this.currentPin = String(pin).trim();
     this.onStatus = onStatusChange || (() => {});
 
-    // 1. Escucha en BroadcastChannel local
+    // 1. Escucha en BroadcastChannel local (pruebas en misma máquina)
     if (this.bc) {
       this.bc.onmessage = (ev) => {
         const { type, payload } = ev.data || {};
@@ -52,74 +39,73 @@ class ShalomRealtime {
       };
     }
 
-    // 2. Conecta a Supabase Realtime Broadcast
-    if (this.client) {
-      if (this.channel) {
-        this.client.removeChannel(this.channel);
+    // 2. Conecta a la Nube WSS (Paho MQTT)
+    if (typeof Paho !== 'undefined' && Paho.Client) {
+      if (this.pahoClient) {
+        try { this.pahoClient.disconnect(); } catch (e) {}
       }
 
-      this.onStatus('connecting', 'Conectando con Supabase Cloud...');
+      this.onStatus('connecting', 'Conectando a la nube en tiempo real...');
+      const clientId = this.generateClientId('host_' + this.currentPin);
+      this.pahoClient = new Paho.Client(this.brokerHost, this.brokerPort, this.brokerPath, clientId);
 
-      this.channel = this.client.channel(`room_${this.currentPin}`, {
-        config: {
-          broadcast: { self: false }
+      this.pahoClient.onConnectionLost = (responseObject) => {
+        this.isConnected = false;
+        if (responseObject.errorCode !== 0) {
+          this.onStatus('warning', '⚠️ Reconectando con la nube...');
+        }
+      };
+
+      this.pahoClient.onMessageArrived = (message) => {
+        try {
+          const data = JSON.parse(message.payloadString);
+          if (data && data.pin === this.currentPin) {
+            onPlayerAction(data);
+          }
+        } catch (e) {
+          console.warn('Error procesando mensaje:', e);
+        }
+      };
+
+      const actionTopic = `shalom2026/room_${this.currentPin}/actions`;
+      this.pahoClient.connect({
+        useSSL: true,
+        timeout: 6,
+        keepAliveInterval: 30,
+        cleanSession: true,
+        reconnect: true,
+        onSuccess: () => {
+          this.isConnected = true;
+          this.pahoClient.subscribe(actionTopic, { qos: 0 });
+          this.onStatus('connected', '🌐 Conectado a la nube (Tiempo Real Activo)');
+        },
+        onFailure: (err) => {
+          console.warn('MQTT Connection failure:', err);
+          this.isConnected = false;
+          this.onStatus('local', '⚡ Modo local activo (reintentando nube...)');
         }
       });
-
-      this.channel
-        .on('broadcast', { event: 'player_action' }, ({ payload }) => {
-          if (payload && payload.pin === this.currentPin) {
-            onPlayerAction(payload);
-          }
-        })
-        .subscribe((status, err) => {
-          if (status === 'SUBSCRIBED') {
-            this.onStatus('connected', '🌐 Conectado a la nube (Supabase Realtime)');
-          } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
-            this.onStatus('warning', '⚠️ Error en canal en la nube. Reintentando...');
-          } else if (status === 'CLOSED') {
-            this.onStatus('offline', '🔴 Desconectado de la nube');
-          }
-        });
     } else {
-      this.onStatus('local', '⚡ Modo local activo (esperando configuración de Supabase para nube)');
+      this.onStatus('local', '⚡ Modo local activo');
     }
   }
 
   hostBroadcastState(state) {
-    if (this.channel) {
-      this.channel.send({
-        type: 'broadcast',
-        event: 'room_state',
-        payload: state
-      }).catch(e => console.warn('Broadcast state error:', e));
-    }
+    this._sendMqtt(`shalom2026/room_${this.currentPin}/state`, { event: 'room_state', payload: state });
     if (this.bc) {
       this.bc.postMessage({ type: 'room_state', payload: state });
     }
   }
 
   hostBroadcastTick(tickData) {
-    if (this.channel) {
-      this.channel.send({
-        type: 'broadcast',
-        event: 'room_tick',
-        payload: tickData
-      }).catch(() => {});
-    }
+    this._sendMqtt(`shalom2026/room_${this.currentPin}/tick`, { event: 'room_tick', payload: tickData });
     if (this.bc) {
       this.bc.postMessage({ type: 'room_tick', payload: tickData });
     }
   }
 
   hostBroadcastResult(resultData) {
-    if (this.channel) {
-      this.channel.send({
-        type: 'broadcast',
-        event: 'question_result',
-        payload: resultData
-      }).catch(() => {});
-    }
+    this._sendMqtt(`shalom2026/room_${this.currentPin}/result`, { event: 'question_result', payload: resultData });
     if (this.bc) {
       this.bc.postMessage({ type: 'question_result', payload: resultData });
     }
@@ -146,45 +132,60 @@ class ShalomRealtime {
       };
     }
 
-    // 2. Conecta a Supabase Realtime
-    if (this.client) {
-      if (this.channel) {
-        this.client.removeChannel(this.channel);
+    // 2. Conecta a la Nube WSS (Paho MQTT)
+    if (typeof Paho !== 'undefined' && Paho.Client) {
+      if (this.pahoClient) {
+        try { this.pahoClient.disconnect(); } catch (e) {}
       }
 
-      this.onStatus('connecting', 'Conectando con la sala...');
+      this.onStatus('connecting', 'Conectando a la sala...');
+      const clientId = this.generateClientId('player_' + playerId);
+      this.pahoClient = new Paho.Client(this.brokerHost, this.brokerPort, this.brokerPath, clientId);
 
-      this.channel = this.client.channel(`room_${this.currentPin}`, {
-        config: {
-          broadcast: { self: false }
+      this.pahoClient.onConnectionLost = (responseObject) => {
+        this.isConnected = false;
+        if (responseObject.errorCode !== 0) {
+          this.onStatus('warning', '⚠️ Reconectando...');
         }
-      });
+      };
 
-      this.channel
-        .on('broadcast', { event: 'room_state' }, ({ payload }) => {
-          if (payload && payload.pin === this.currentPin) {
+      this.pahoClient.onMessageArrived = (message) => {
+        try {
+          const data = JSON.parse(message.payloadString);
+          const { event, payload } = data || {};
+          if (event === 'room_state' && payload && payload.pin === this.currentPin) {
             onRoomState(payload);
-          }
-        })
-        .on('broadcast', { event: 'room_tick' }, ({ payload }) => {
-          onRoomTick(payload);
-        })
-        .on('broadcast', { event: 'question_result' }, ({ payload }) => {
-          if (payload && payload.playerId === playerId) {
+          } else if (event === 'room_tick') {
+            onRoomTick(payload);
+          } else if (event === 'question_result' && payload && payload.playerId === playerId) {
             onQuestionResult(payload);
           }
-        })
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            this.onStatus('connected', '🟢 Conectado');
-            this.playerSendJoin(this.currentPin, playerId, name, dni);
-          } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
-            this.onStatus('warning', '⚠️ Reconectando...');
-          }
-        });
+        } catch (e) {
+          console.warn('Error parseando mensaje:', e);
+        }
+      };
+
+      const roomPrefix = `shalom2026/room_${this.currentPin}/`;
+      this.pahoClient.connect({
+        useSSL: true,
+        timeout: 6,
+        keepAliveInterval: 30,
+        cleanSession: true,
+        reconnect: true,
+        onSuccess: () => {
+          this.isConnected = true;
+          this.pahoClient.subscribe(`${roomPrefix}#`, { qos: 0 });
+          this.onStatus('connected', '🟢 Conectado a la sala');
+          this.playerSendJoin(this.currentPin, playerId, name, dni);
+        },
+        onFailure: () => {
+          this.isConnected = false;
+          this.onStatus('local', '⚡ Modo local');
+          this.playerSendJoin(this.currentPin, playerId, name, dni);
+        }
+      });
     } else {
       this.onStatus('local', '⚡ Modo local');
-      // Enviar join local inmediatamente
       this.playerSendJoin(this.currentPin, playerId, name, dni);
     }
   }
@@ -198,13 +199,7 @@ class ShalomRealtime {
       dni,
       timestamp: Date.now()
     };
-    if (this.channel) {
-      this.channel.send({
-        type: 'broadcast',
-        event: 'player_action',
-        payload
-      }).catch(() => {});
-    }
+    this._sendMqtt(`shalom2026/room_${pin}/actions`, payload);
     if (this.bc) {
       this.bc.postMessage({ type: 'player_action', payload });
     }
@@ -218,15 +213,22 @@ class ShalomRealtime {
       optionIndex: Number(optionIndex),
       timestamp: Date.now()
     };
-    if (this.channel) {
-      this.channel.send({
-        type: 'broadcast',
-        event: 'player_action',
-        payload
-      }).catch(() => {});
-    }
+    this._sendMqtt(`shalom2026/room_${pin}/actions`, payload);
     if (this.bc) {
       this.bc.postMessage({ type: 'player_action', payload });
+    }
+  }
+
+  _sendMqtt(topic, data) {
+    if (this.pahoClient && this.isConnected) {
+      try {
+        const msg = new Paho.Message(JSON.stringify(data));
+        msg.destinationName = topic;
+        msg.qos = 0;
+        this.pahoClient.send(msg);
+      } catch (e) {
+        console.warn('MQTT send error:', e);
+      }
     }
   }
 }

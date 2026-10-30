@@ -5,10 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Anfitrión | Shalom Kahoot Inducción 2026</title>
   <link rel="stylesheet" href="./styles.css" />
-  <script src="./vendor/supabase.js"></script>
+  <script src="./vendor/paho-mqtt.js"></script>
   <script src="./vendor/qrcode.js"></script>
   <script src="./questions-data.js"></script>
-  <script src="./supabase-config.js"></script>
   <script src="./realtime-manager.js"></script>
 </head>
 <body>
@@ -19,14 +18,11 @@
         PIN: <strong id="headerPinText" style="font-size: 1.1rem; color: var(--shalom-gold);">------</strong>
       </span>
       <span id="connectionBadge" class="badge-pill" style="font-size: 0.8rem; background: rgba(38, 137, 12, 0.2); border-color: #26890C;">
-        ⚡ Modo Local
+        🌐 Conectando a la nube...
       </span>
     </div>
 
     <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-      <button id="btnConfigCloud" class="btn btn-secondary" style="padding: 8px 14px; font-size: 0.9rem;">
-        ⚙️ Configurar Nube
-      </button>
       <button id="btnToggleAuto" class="btn btn-secondary" style="padding: 8px 14px; font-size: 0.9rem; border-color: #26890C; background: rgba(38, 137, 12, 0.22);">
         🤖 Auto-Avance: ON
       </button>
@@ -41,39 +37,6 @@
       </button>
     </div>
   </header>
-
-  <!-- MODAL DE CONFIGURACIÓN SUPABASE CLOUD -->
-  <div id="modalCloud" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 100; align-items: center; justify-content: center; padding: 20px;">
-    <div class="form-card" style="max-width: 520px; width: 100%; position: relative;">
-      <h2 style="font-size: 1.45rem; font-weight: 900; margin-bottom: 8px; color: var(--shalom-gold);">
-        ⚙️ Conexión Multijugador por Internet (Supabase)
-      </h2>
-      <p style="color: #CBD5E1; font-size: 0.9rem; line-height: 1.45; margin-bottom: 16px;">
-        Para jugar con colaboradores en diferentes redes o datos móviles (4G/5G) desplegado en Vercel, ingresa los datos de tu proyecto gratuito de Supabase:
-      </p>
-
-      <div class="input-group">
-        <label for="inputSbUrl">Project URL (ej: https://xyzcompany.supabase.co)</label>
-        <input id="inputSbUrl" type="url" class="input-field" placeholder="https://xxxx.supabase.co" />
-      </div>
-
-      <div class="input-group">
-        <label for="inputSbKey">Anon Public API Key (clave pública)</label>
-        <textarea id="inputSbKey" class="input-field" rows="3" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."></textarea>
-      </div>
-
-      <div style="font-size: 0.8rem; color: #94A3B8; margin-bottom: 16px; line-height: 1.4;">
-        💡 <strong>¿Dónde conseguirlo gratis en 1 minuto?</strong><br>
-        1. Entra a <a href="https://supabase.com" target="_blank" style="color: var(--shalom-gold);">supabase.com</a> y crea un proyecto gratis.<br>
-        2. Ve a <strong>Project Settings → API</strong> y copia el <em>Project URL</em> y el <em>anon public key</em>.
-      </div>
-
-      <div style="display: flex; gap: 12px; justify-content: flex-end;">
-        <button id="btnCloseModal" class="btn btn-secondary" style="padding: 10px 18px;">Cancelar</button>
-        <button id="btnSaveCloudConfig" class="btn btn-primary" style="padding: 10px 22px;">Guardar y Conectar</button>
-      </div>
-    </div>
-  </div>
 
   <main class="container">
     <!-- ================= 1. PANTALLA LOBBY ================= -->
@@ -895,25 +858,6 @@
 
     document.getElementById('btnOpenTestPhone').addEventListener('click', () => {
       window.open(`./play.html?pin=${currentPin}`, '_blank', 'width=430,height=780');
-    });
-
-    // Modal Supabase
-    const modalCloud = document.getElementById('modalCloud');
-    document.getElementById('btnConfigCloud').addEventListener('click', () => {
-      document.getElementById('inputSbUrl').value = window.SHALOM_CONFIG.supabaseUrl || '';
-      document.getElementById('inputSbKey').value = window.SHALOM_CONFIG.supabaseAnonKey || '';
-      modalCloud.style.display = 'flex';
-    });
-    document.getElementById('btnCloseModal').addEventListener('click', () => {
-      modalCloud.style.display = 'none';
-    });
-    document.getElementById('btnSaveCloudConfig').addEventListener('click', () => {
-      const u = document.getElementById('inputSbUrl').value.trim();
-      const k = document.getElementById('inputSbKey').value.trim();
-      window.SHALOM_CONFIG.save(u, k);
-      modalCloud.style.display = 'none';
-      window.shalomRealtime.initSupabaseClient();
-      createNewRoom(document.getElementById('selectMode').value);
     });
 
     function escapeHtml(str) {

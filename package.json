@@ -1,16 +1,13 @@
 {
   "name": "kahoot-shalom-2026",
   "version": "1.0.0",
-  "description": "Plataforma Interactiva Multijugador de Inducción Shalom 2026 (Estilo Kahoot)",
-  "main": "server.js",
+  "description": "Plataforma Interactiva Multijugador de Inducción Shalom 2026 (Kahoot Clon)",
   "scripts": {
+    "build": "echo 'Static site ready for Vercel'",
     "start": "node server.js",
     "dev": "node server.js"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "dependencies": {
+  "devDependencies": {
     "express": "^4.21.2",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.1"

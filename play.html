@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Jugar | Shalom Inducción 2026</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="./vendor/supabase.js"></script>
+  <script src="./supabase-config.js"></script>
+  <script src="./realtime-manager.js"></script>
+</head>
+<body>
+  <div class="mobile-shell">
+    <!-- Barra superior del jugador -->
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 4px; border-bottom: 1px solid var(--shalom-border); margin-bottom: 14px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <img src="./logo-shalom.svg" alt="Shalom" style="height: 34px;" />
+        <span id="playerConnDot" style="width: 10px; height: 10px; border-radius: 50%; background: #26890C; display: inline-block;" title="Estado de conexión"></span>
+      </div>
+      <div id="playerStatsBar" style="display: none; align-items: center; gap: 10px;">
+        <span id="playerNameTag" style="font-weight: 800; font-size: 0.9rem; color: #CBD5E1;"></span>
+        <span id="playerScoreTag" class="badge-pill" style="background: var(--shalom-red); padding: 4px 12px; font-size: 0.9rem;">0 pts</span>
+      </div>
+    </div>
+
+    <!-- 1. FORMULARIO DE INGRESO -->
+    <section id="screenJoin" class="form-card" style="margin: auto 0;">
+      <h1 style="font-size: 1.55rem; font-weight: 900; text-align: center; margin-bottom: 6px;">
+        Ingresar al Desafío Shalom
+      </h1>
+      <p style="text-align: center; color: #94A3B8; font-size: 0.92rem; margin-bottom: 20px;">
+        Inducción Cultural y de Puesto PICP 2026
+      </p>
+
+      <form id="joinForm">
+        <div class="input-group">
+          <label for="inputPin">PIN del Juego (6 dígitos)</label>
+          <input id="inputPin" type="text" inputmode="numeric" class="input-field" placeholder="Ej: 482910" required style="text-align: center; letter-spacing: 4px; font-size: 1.35rem;" />
+        </div>
+
+        <div class="input-group">
+          <label for="inputName">Nombres y Apellidos *</label>
+          <input id="inputName" type="text" class="input-field" placeholder="Ej: Carlos Pérez" maxlength="28" required />
+        </div>
+
+        <div class="input-group">
+          <label for="inputDni">DNI o Sede (para constancia RRHH)</label>
+          <input id="inputDni" type="text" class="input-field" placeholder="Ej: 74125896 - Huachipa" maxlength="20" />
+        </div>
+
+        <div id="joinError" style="display: none; background: rgba(226, 27, 60, 0.2); border: 1px solid #E21B3C; color: #FCA5A5; padding: 10px 12px; border-radius: 10px; font-size: 0.9rem; margin-bottom: 14px; font-weight: 700;"></div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; font-size: 1.15rem; padding: 15px;">
+          🚀 ¡Listo, Entrar a Jugar!
+        </button>
+      </form>
+    </section>
+
+    <!-- 2. SALA DE ESPERA EN EL CELULAR -->
+    <section id="screenWaitingLobby" class="form-card" style="display: none; text-align: center; margin: auto 0;">
+      <div style="font-size: 3.4rem; margin-bottom: 10px;">✅</div>
+      <h2 style="font-size: 1.5rem; font-weight: 900; margin-bottom: 8px;">
+        ¡Estás dentro!
+      </h2>
+      <p style="color: #CBD5E1; font-size: 1.05rem; margin-bottom: 16px;">
+        Mira tu nombre en la pantalla principal. El capacitador iniciará la primera pregunta en breve...
+      </p>
+      <div class="badge-pill" style="font-size: 1rem; padding: 8px 18px;">
+        Sala PIN: <strong id="waitingPinText"></strong>
+      </div>
+    </section>
+
+    <!-- 3. BOTONERA DE RESPUESTA (4 COLORES KAHOOT) -->
+    <section id="screenAnswerPad" style="display: none; flex: 1; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span id="mobileQNumber" class="badge-pill" style="font-size: 0.82rem;">Pregunta 1</span>
+        <span id="mobileTimerBadge" class="badge-pill" style="background: var(--shalom-red); font-size: 0.9rem;">⏱ 20 s</span>
+      </div>
+
+      <div id="mobileQuestionTitle" style="background: #FFFFFF; color: #0F172A; padding: 14px 16px; border-radius: 14px; font-weight: 800; font-size: 1.05rem; text-align: center; border-bottom: 4px solid var(--shalom-red);">
+        ¿Pregunta activa?
+      </div>
+
+      <div class="mobile-kahoot-grid">
+        <button type="button" class="mobile-k-btn k-opt-0" data-idx="0">
+          <span class="big-shape">▲</span>
+          <span id="mOpt0">Opción 1</span>
+        </button>
+        <button type="button" class="mobile-k-btn k-opt-1" data-idx="1">
+          <span class="big-shape">◆</span>
+          <span id="mOpt1">Opción 2</span>
+        </button>
+        <button type="button" class="mobile-k-btn k-opt-2" data-idx="2">
+          <span class="big-shape">●</span>
+          <span id="mOpt2">Opción 3</span>
+        </button>
+        <button type="button" class="mobile-k-btn k-opt-3" data-idx="3">
+          <span class="big-shape">■</span>
+          <span id="mOpt3">Opción 4</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 4. RESPUESTA ENVIADA (ESPERANDO RELOJ) -->
+    <section id="screenLockedAnswer" class="form-card" style="display: none; text-align: center; margin: auto 0;">
+      <div style="font-size: 3.2rem; margin-bottom: 12px;">⚡</div>
+      <h2 style="font-size: 1.45rem; font-weight: 900; margin-bottom: 8px;">
+        ¡Respuesta Registrada!
+      </h2>
+      <p style="color: #CBD5E1; font-size: 1rem;">
+        ¿Habrás sido el más rápido? Esperando a que termine el tiempo...
+      </p>
+    </section>
+
+    <!-- 5. RESULTADO DE LA PREGUNTA EN EL CELULAR -->
+    <section id="screenQuestionFeedback" class="form-card" style="display: none; text-align: center; margin: auto 0;">
+      <div id="fbIcon" style="font-size: 3.6rem; margin-bottom: 6px;">🎉</div>
+      <h2 id="fbTitle" style="font-size: 1.75rem; font-weight: 900; margin-bottom: 6px;">
+        ¡CORRECTO!
+      </h2>
+      <div id="fbPoints" style="display: inline-block; background: rgba(0,0,0,0.35); padding: 8px 20px; border-radius: 99px; font-size: 1.3rem; font-weight: 900; color: var(--shalom-gold); margin-bottom: 12px;">
+        +890 pts
+      </div>
+      <div id="fbStreak" style="font-weight: 800; color: #FDE047; margin-bottom: 12px;"></div>
+
+      <div id="fbCorrectAnswerBox" style="background: rgba(15, 23, 42, 0.75); padding: 12px 14px; border-radius: 12px; font-size: 0.95rem; margin-bottom: 12px; text-align: left;">
+        <div style="font-size: 0.8rem; color: #94A3B8; font-weight: 700;">Respuesta correcta:</div>
+        <div id="fbCorrectText" style="font-weight: 800; color: #FFFFFF; margin-top: 2px;"></div>
+      </div>
+
+      <div id="fbExplanation" style="font-size: 0.9rem; color: #E2E8F0; line-height: 1.4; background: rgba(255,255,255,0.08); padding: 10px 12px; border-radius: 10px; margin-bottom: 14px; text-align: left;"></div>
+
+      <div style="font-size: 0.95rem; font-weight: 800; color: #CBD5E1;">
+        Posición actual: <strong id="fbRank" style="color: var(--shalom-gold);">1°</strong>
+      </div>
+    </section>
+
+    <!-- 6. FIN DEL JUEGO / PODIO EN CELULAR -->
+    <section id="screenFinalMobile" class="form-card" style="display: none; text-align: center; margin: auto 0;">
+      <div style="font-size: 3.6rem; margin-bottom: 8px;">🏆</div>
+      <h2 style="font-size: 1.65rem; font-weight: 900; color: var(--shalom-gold); margin-bottom: 6px;">
+        ¡Inducción Completada!
+      </h2>
+      <p id="finalPlayerSummary" style="font-size: 1.15rem; font-weight: 800; margin-bottom: 12px;"></p>
+      <div id="finalStatusBadge" class="badge-pill" style="font-size: 1.05rem; padding: 8px 20px; margin-bottom: 16px;"></div>
+      <p style="color: #94A3B8; font-size: 0.9rem;">
+        Tus resultados ya han sido registrados en la tabla general de RRHH.
+      </p>
+    </section>
+  </div>
+
+  <script>
+    // Identificador persistente de jugador
+    let playerId = sessionStorage.getItem('shalom_player_id');
+    if (!playerId) {
+      playerId = 'p_' + Math.random().toString(36).slice(2, 10) + '_' + Date.now().toString(36);
+      sessionStorage.setItem('shalom_player_id', playerId);
+    }
+
+    let joinedPin = sessionStorage.getItem('shalom_joined_pin') || '';
+    let playerName = sessionStorage.getItem('shalom_player_name') || '';
+    let playerDni = sessionStorage.getItem('shalom_player_dni') || '';
+    let isJoined = false;
+    let lastRenderedQuestionIdx = -1;
+    let hasFeedbackForCurrentQ = false;
+
+    const screens = {
+      join: document.getElementById('screenJoin'),
+      waiting: document.getElementById('screenWaitingLobby'),
+      pad: document.getElementById('screenAnswerPad'),
+      locked: document.getElementById('screenLockedAnswer'),
+      feedback: document.getElementById('screenQuestionFeedback'),
+      final: document.getElementById('screenFinalMobile')
+    };
+
+    function showOnly(screenKey) {
+      Object.entries(screens).forEach(([key, el]) => {
+        el.style.display = key === screenKey ? (key === 'pad' ? 'flex' : 'block') : 'none';
+      });
+    }
+
+    function handleQuestionResult(data) {
+      hasFeedbackForCurrentQ = true;
+      document.getElementById('playerScoreTag').textContent = `${data.totalScore} pts`;
+
+      const fbCard = screens.feedback;
+      if (data.isCorrect) {
+        fbCard.style.borderColor = '#26890C';
+        document.getElementById('fbIcon').textContent = '✅';
+        document.getElementById('fbTitle').textContent = '¡CORRECTO!';
+        document.getElementById('fbTitle').style.color = '#4ADE80';
+        document.getElementById('fbPoints').textContent = `+${data.pointsEarned} pts`;
+      } else {
+        fbCard.style.borderColor = '#E21B3C';
+        document.getElementById('fbIcon').textContent = data.chosenIndex === -1 ? '⌛' : '❌';
+        document.getElementById('fbTitle').textContent = data.chosenIndex === -1 ? '¡TIEMPO AGOTADO!' : 'INCORRECTO';
+        document.getElementById('fbTitle').style.color = '#F87171';
+        document.getElementById('fbPoints').textContent = '+0 pts';
+      }
+
+      document.getElementById('fbStreak').textContent = data.streak >= 2 ? `🔥 ¡Racha de ${data.streak} aciertos seguidos!` : '';
+      document.getElementById('fbCorrectText').textContent = data.correctText || '';
+      document.getElementById('fbExplanation').textContent = data.explanation ? `💡 ${data.explanation}` : '';
+      document.getElementById('fbRank').textContent = `${data.rank}° de ${data.totalPlayers}`;
+      showOnly('feedback');
+    }
+
+    function handleRoomState(state) {
+      if (!isJoined) return;
+      const me = state.players.find(p => p.id === playerId);
+      if (me) {
+        document.getElementById('playerScoreTag').textContent = `${me.score} pts`;
+      }
+
+      if (state.state === 'LOBBY') {
+        showOnly('waiting');
+      } else if (state.state === 'QUESTION' && state.question) {
+        if (lastRenderedQuestionIdx !== state.currentQuestionIndex) {
+          lastRenderedQuestionIdx = state.currentQuestionIndex;
+          hasFeedbackForCurrentQ = false;
+        }
+        document.getElementById('mobileQNumber').textContent = `Pregunta ${state.currentQuestionIndex + 1}/${state.totalQuestions} • ${state.question.category}`;
+        document.getElementById('mobileTimerBadge').textContent = `⏱ ${state.timeRemaining} s`;
+        document.getElementById('mobileQuestionTitle').textContent = state.question.question;
+
+        state.question.options.forEach((opt, idx) => {
+          document.getElementById(`mOpt${idx}`).textContent = opt;
+        });
+
+        if (me && me.hasAnswered) {
+          showOnly('locked');
+        } else {
+          showOnly('pad');
+        }
+      } else if (state.state === 'RESULTS' || state.state === 'LEADERBOARD') {
+        if (!hasFeedbackForCurrentQ && state.question) {
+          showOnly('feedback');
+        }
+      } else if (state.state === 'PODIUM') {
+        if (me) {
+          const rank = state.players.findIndex(p => p.id === playerId) + 1;
+          const pct = state.totalQuestions > 0 ? Math.round((me.correctCount / state.totalQuestions) * 100) : 0;
+          document.getElementById('finalPlayerSummary').textContent = `Puesto #${rank} • ${me.score} pts (${me.correctCount}/${state.totalQuestions} aciertos - ${pct}%)`;
+          const badge = document.getElementById('finalStatusBadge');
+          if (pct >= 70) {
+            badge.style.background = '#26890C';
+            badge.textContent = '🎉 CONDICIÓN: APROBADO';
+          } else {
+            badge.style.background = '#D97706';
+            badge.textContent = '📘 CONDICIÓN: POR REFORZAR';
+          }
+        }
+        showOnly('final');
+      }
+    }
+
+    function handleRoomTick(data) {
+      document.getElementById('mobileTimerBadge').textContent = `⏱ ${data.timeRemaining} s`;
+    }
+
+    function handleConnStatus(statusType, statusText) {
+      const dot = document.getElementById('playerConnDot');
+      if (statusType === 'connected') {
+        dot.style.background = '#26890C';
+        dot.title = statusText;
+      } else if (statusType === 'warning') {
+        dot.style.background = '#D97706';
+        dot.title = statusText;
+      } else {
+        dot.style.background = '#E21B3C';
+        dot.title = statusText;
+      }
+    }
+
+    // Prefill form
+    const params = new URLSearchParams(window.location.search);
+    const urlPin = params.get('pin');
+    if (urlPin) document.getElementById('inputPin').value = urlPin;
+    if (playerName) document.getElementById('inputName').value = playerName;
+    if (playerDni) document.getElementById('inputDni').value = playerDni;
+
+    document.getElementById('joinForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const pin = document.getElementById('inputPin').value.trim();
+      const name = document.getElementById('inputName').value.trim();
+      const dni = document.getElementById('inputDni').value.trim();
+
+      if (!pin || pin.length < 6) {
+        const errEl = document.getElementById('joinError');
+        errEl.textContent = 'Por favor ingresa un PIN de 6 dígitos válido.';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      isJoined = true;
+      joinedPin = pin;
+      playerName = name;
+      playerDni = dni;
+      sessionStorage.setItem('shalom_joined_pin', joinedPin);
+      sessionStorage.setItem('shalom_player_name', playerName);
+      sessionStorage.setItem('shalom_player_dni', playerDni);
+
+      document.getElementById('playerStatsBar').style.display = 'flex';
+      document.getElementById('playerNameTag').textContent = playerName;
+      document.getElementById('waitingPinText').textContent = joinedPin;
+      showOnly('waiting');
+
+      window.shalomRealtime.initPlayer(joinedPin, playerId, playerName, playerDni, {
+        onRoomState: handleRoomState,
+        onRoomTick: handleRoomTick,
+        onQuestionResult: handleQuestionResult,
+        onStatusChange: handleConnStatus
+      });
+    });
+
+    // Respuestas
+    document.querySelectorAll('.mobile-k-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const optionIndex = Number(btn.getAttribute('data-idx'));
+        window.shalomRealtime.playerSendAnswer(joinedPin, playerId, optionIndex);
+        showOnly('locked');
+      });
+    });
+  </script>
+</body>
+</html>

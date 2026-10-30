@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 88" fill="none">
+  <!-- Red badge emblem with speed wings -->
+  <rect x="4" y="8" width="72" height="72" rx="16" fill="#E30613"/>
+  <path d="M18 32H54L62 22H26L18 32Z" fill="#FFFFFF" opacity="0.95"/>
+  <path d="M14 46H50L58 36H22L14 46Z" fill="#FFB703"/>
+  <path d="M22 60H58L50 50H14L22 60Z" fill="#FFFFFF" opacity="0.95"/>
+  <!-- Brand typography -->
+  <text x="90" y="50" font-family="'Segoe UI', 'Inter', 'Arial Black', sans-serif" font-weight="900" font-size="40" letter-spacing="1.5" fill="#FFFFFF">SHALOM</text>
+  <rect x="92" y="58" width="168" height="20" rx="4" fill="#E30613"/>
+  <text x="100" y="72" font-family="'Segoe UI', 'Inter', Arial, sans-serif" font-weight="800" font-size="11.5" letter-spacing="2.2" fill="#FFFFFF">INDUCCIÓN PICP 2026</text>
+</svg>

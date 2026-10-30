@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Anfitrión | Shalom Kahoot Inducción 2026</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="./vendor/supabase.js"></script>
+  <script src="./vendor/qrcode.js"></script>
+  <script src="./questions-data.js"></script>
+  <script src="./supabase-config.js"></script>
+  <script src="./realtime-manager.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+      <a href="./index.html"><img src="./logo-shalom.svg" alt="Shalom" class="brand-logo" /></a>
+      <span id="headerPinBadge" class="badge-pill" style="display: none;">
+        PIN: <strong id="headerPinText" style="font-size: 1.1rem; color: var(--shalom-gold);">------</strong>
+      </span>
+      <span id="connectionBadge" class="badge-pill" style="font-size: 0.8rem; background: rgba(38, 137, 12, 0.2); border-color: #26890C;">
+        ⚡ Modo Local
+      </span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+      <button id="btnConfigCloud" class="btn btn-secondary" style="padding: 8px 14px; font-size: 0.9rem;">
+        ⚙️ Configurar Nube
+      </button>
+      <button id="btnToggleAuto" class="btn btn-secondary" style="padding: 8px 14px; font-size: 0.9rem; border-color: #26890C; background: rgba(38, 137, 12, 0.22);">
+        🤖 Auto-Avance: ON
+      </button>
+      <button id="btnToggleSound" class="btn btn-secondary" style="padding: 8px 14px; font-size: 0.9rem;">
+        🔊 Sonido: ON
+      </button>
+      <button id="btnOpenTestPhone" class="btn btn-gold" style="padding: 8px 16px; font-size: 0.9rem;">
+        📱 Abrir Celular de Prueba
+      </button>
+      <button id="btnResetLobby" class="btn btn-secondary" style="padding: 8px 14px; font-size: 0.9rem;">
+        🔄 Nueva Sala
+      </button>
+    </div>
+  </header>
+
+  <!-- MODAL DE CONFIGURACIÓN SUPABASE CLOUD -->
+  <div id="modalCloud" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 100; align-items: center; justify-content: center; padding: 20px;">
+    <div class="form-card" style="max-width: 520px; width: 100%; position: relative;">
+      <h2 style="font-size: 1.45rem; font-weight: 900; margin-bottom: 8px; color: var(--shalom-gold);">
+        ⚙️ Conexión Multijugador por Internet (Supabase)
+      </h2>
+      <p style="color: #CBD5E1; font-size: 0.9rem; line-height: 1.45; margin-bottom: 16px;">
+        Para jugar con colaboradores en diferentes redes o datos móviles (4G/5G) desplegado en Vercel, ingresa los datos de tu proyecto gratuito de Supabase:
+      </p>
+
+      <div class="input-group">
+        <label for="inputSbUrl">Project URL (ej: https://xyzcompany.supabase.co)</label>
+        <input id="inputSbUrl" type="url" class="input-field" placeholder="https://xxxx.supabase.co" />
+      </div>
+
+      <div class="input-group">
+        <label for="inputSbKey">Anon Public API Key (clave pública)</label>
+        <textarea id="inputSbKey" class="input-field" rows="3" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."></textarea>
+      </div>
+
+      <div style="font-size: 0.8rem; color: #94A3B8; margin-bottom: 16px; line-height: 1.4;">
+        💡 <strong>¿Dónde conseguirlo gratis en 1 minuto?</strong><br>
+        1. Entra a <a href="https://supabase.com" target="_blank" style="color: var(--shalom-gold);">supabase.com</a> y crea un proyecto gratis.<br>
+        2. Ve a <strong>Project Settings → API</strong> y copia el <em>Project URL</em> y el <em>anon public key</em>.
+      </div>
+
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button id="btnCloseModal" class="btn btn-secondary" style="padding: 10px 18px;">Cancelar</button>
+        <button id="btnSaveCloudConfig" class="btn btn-primary" style="padding: 10px 22px;">Guardar y Conectar</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="container">
+    <!-- ================= 1. PANTALLA LOBBY ================= -->
+    <section id="viewLobby">
+      <div class="lobby-hero">
+        <div class="qr-card">
+          <img id="qrImage" src="" alt="Código QR para unirse" style="border-radius: 12px;" />
+          <div style="font-weight: 800; font-size: 0.95rem; color: #0F172A; margin-top: 6px;">
+            Escanea con tu cámara para entrar
+          </div>
+          <div id="joinUrlDisplay" style="font-size: 0.78rem; color: #475569; word-break: break-all; margin-top: 4px;"></div>
+        </div>
+
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <div style="color: #CBD5E1; font-weight: 700; font-size: 1.05rem;">
+                Únete desde cualquier celular o ventana de prueba con el código:
+              </div>
+              <div class="pin-box">
+                <div class="pin-label">PIN DEL JUEGO</div>
+                <div id="lobbyPin" class="pin-digits">------</div>
+              </div>
+            </div>
+
+            <!-- Selector de Modo / Módulo -->
+            <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid var(--shalom-border); padding: 14px 18px; border-radius: 16px; min-width: 270px;">
+              <label for="selectMode" style="display: block; font-size: 0.82rem; font-weight: 800; color: var(--shalom-gold); text-transform: uppercase; margin-bottom: 6px;">
+                Modalidad del Cuestionario:
+              </label>
+              <select id="selectMode" class="input-field" style="padding: 10px 12px; font-size: 0.95rem;">
+                <option value="all">Inducción Completa (35 preguntas)</option>
+                <option value="quick10">Modo Express (10 preguntas clave)</option>
+                <option value="quick15">Modo Intermedio (15 preguntas)</option>
+                <option value="cat:Identidad y Cultura">Módulo 1: Identidad y Cultura (4)</option>
+                <option value="cat:RRHH y Asistencia">Módulo 2: RRHH y Asistencia (8)</option>
+                <option value="cat:EPP y Seguridad">Módulo 3: EPP y Seguridad (5)</option>
+                <option value="cat:Operaciones Huachipa">Módulo 4: Operaciones Huachipa (6)</option>
+                <option value="cat:Stickers y Trazabilidad">Módulo 5: Stickers y Trazabilidad (4)</option>
+                <option value="cat:Estiba, Ergonomía y SST">Módulo 6: Estiba, Ergonomía y SST (8)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 16px; flex-wrap: wrap; gap: 14px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 1.7rem; font-weight: 900; color: var(--shalom-gold);" id="playerCountLobby">0</span>
+              <span style="font-weight: 700; color: #CBD5E1;">Colaboradores conectados</span>
+            </div>
+
+            <button id="btnStartGame" class="btn btn-primary" style="font-size: 1.25rem; padding: 16px 34px;">
+              ▶ Iniciar Kahoot Shalom (<span id="totalQBadge">35</span> preguntas)
+            </button>
+          </div>
+
+          <div id="lobbyPlayersList" class="players-grid">
+            <div style="color: #94A3B8; font-style: italic; padding: 14px 0;">
+              Esperando participantes... Haz clic en «📱 Abrir Celular de Prueba» arriba o escanea el QR con tu móvil.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 2. PANTALLA PREGUNTA ACTIVA Y RESULTADOS ================= -->
+    <section id="viewQuestion" style="display: none;">
+      <div class="question-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span class="badge-pill" id="qCounterBadge" style="background: var(--shalom-red); font-size: 1rem;">
+            Pregunta 1 de 35
+          </span>
+          <span class="badge-pill" id="qCategoryBadge">
+            Categoría
+          </span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button id="btnSkipTimer" class="btn btn-secondary" style="padding: 10px 18px;">
+            ⏭ Revelar Respuesta Ahora
+          </button>
+          <button id="btnNextStep" class="btn btn-gold" style="display: none; padding: 12px 26px; font-size: 1.1rem;">
+            Siguiente →
+          </button>
+          <button id="btnFinishEarly" class="btn btn-secondary" style="padding: 10px 16px; font-size: 0.88rem;">
+            🏆 Ir al Podio
+          </button>
+        </div>
+      </div>
+
+      <div id="questionText" class="question-card">
+        ¿Pregunta de la inducción?
+      </div>
+
+      <div id="liveQuestionStats" class="question-meta-row">
+        <div class="timer-circle">
+          <span id="timerNumber">20</span>
+          <span style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase;">seg</span>
+        </div>
+
+        <div style="text-align: center; color: #CBD5E1; font-size: 1.1rem; font-weight: 700;">
+          ¡Mira tu celular y presiona el color / figura correcta!
+        </div>
+
+        <div class="answers-counter">
+          <div class="num"><span id="answeredCount">0</span> / <span id="totalPlayersCount">0</span></div>
+          <div style="font-size: 0.85rem; color: #CBD5E1; font-weight: 700;">Respuestas recibidas</div>
+        </div>
+      </div>
+
+      <div id="resultsBreakdown" style="display: none; margin-bottom: 24px;">
+        <div class="bars-container">
+          <div class="bar-col">
+            <div id="barCount0" class="bar-count">0</div>
+            <div id="barFill0" class="bar-fill" style="background: var(--k-red); height: 14px;"></div>
+            <div class="bar-label" style="border-top: 3px solid var(--k-red);">▲ <span id="barCheck0"></span></div>
+          </div>
+          <div class="bar-col">
+            <div id="barCount1" class="bar-count">0</div>
+            <div id="barFill1" class="bar-fill" style="background: var(--k-blue); height: 14px;"></div>
+            <div class="bar-label" style="border-top: 3px solid var(--k-blue);">◆ <span id="barCheck1"></span></div>
+          </div>
+          <div class="bar-col">
+            <div id="barCount2" class="bar-count">0</div>
+            <div id="barFill2" class="bar-fill" style="background: var(--k-yellow); height: 14px;"></div>
+            <div class="bar-label" style="border-top: 3px solid var(--k-yellow);">● <span id="barCheck2"></span></div>
+          </div>
+          <div class="bar-col">
+            <div id="barCount3" class="bar-count">0</div>
+            <div id="barFill3" class="bar-fill" style="background: var(--k-green); height: 14px;"></div>
+            <div class="bar-label" style="border-top: 3px solid var(--k-green);">■ <span id="barCheck3"></span></div>
+          </div>
+        </div>
+
+        <div id="explanationBox" class="explanation-banner">
+          <strong style="color: var(--shalom-gold);">💡 Refuerzo Shalom 2026:</strong>
+          <span id="explanationText"></span>
+        </div>
+      </div>
+
+      <div class="kahoot-grid">
+        <div id="optCard0" class="k-option k-opt-0">
+          <div class="shape">▲</div>
+          <div id="optText0" style="flex: 1;">Opción 1</div>
+        </div>
+        <div id="optCard1" class="k-option k-opt-1">
+          <div class="shape">◆</div>
+          <div id="optText1" style="flex: 1;">Opción 2</div>
+        </div>
+        <div id="optCard2" class="k-option k-opt-2">
+          <div class="shape">●</div>
+          <div id="optText2" style="flex: 1;">Opción 3</div>
+        </div>
+        <div id="optCard3" class="k-option k-opt-3">
+          <div class="shape">■</div>
+          <div id="optText3" style="flex: 1;">Opción 4</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 3. PANTALLA RANKING PARCIAL ================= -->
+    <section id="viewLeaderboard" style="display: none;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
+        <h2 style="font-size: 2rem; font-weight: 900;">📊 Tabla de Posiciones</h2>
+        <button id="btnNextFromLb" class="btn btn-primary" style="font-size: 1.15rem; padding: 14px 28px;">
+          Siguiente Pregunta →
+        </button>
+      </div>
+      <div id="leaderboardContainer" class="leaderboard-list"></div>
+    </section>
+
+    <!-- ================= 4. PANTALLA PODIO FINAL Y REPORTE RRHH ================= -->
+    <section id="viewPodium" style="display: none; text-align: center;">
+      <h1 style="font-size: 2.6rem; font-weight: 900; color: var(--shalom-gold); margin-bottom: 6px;">
+        🏆 ¡Podio Final - Inducción Shalom 2026!
+      </h1>
+      <p style="color: #CBD5E1; font-size: 1.1rem; margin-bottom: 20px;">
+        Felicitaciones a todos los colaboradores por completar la evaluación interactiva.
+      </p>
+
+      <div class="podium-stage">
+        <div class="podium-spot podium-2">
+          <div id="podiumName2" style="font-size: 1.25rem; font-weight: 900; margin-bottom: 8px;">---</div>
+          <div class="podium-pillar">
+            <div style="font-size: 2.4rem;">🥈 2°</div>
+            <div id="podiumScore2" style="font-size: 1.1rem; margin-top: 6px;">0 pts</div>
+          </div>
+        </div>
+        <div class="podium-spot podium-1">
+          <div id="podiumName1" style="font-size: 1.5rem; font-weight: 900; color: var(--shalom-gold); margin-bottom: 8px;">---</div>
+          <div class="podium-pillar">
+            <div style="font-size: 3rem;">👑 1°</div>
+            <div id="podiumScore1" style="font-size: 1.25rem; margin-top: 6px;">0 pts</div>
+          </div>
+        </div>
+        <div class="podium-spot podium-3">
+          <div id="podiumName3" style="font-size: 1.2rem; font-weight: 900; margin-bottom: 8px;">---</div>
+          <div class="podium-pillar">
+            <div style="font-size: 2.2rem;">🥉 3°</div>
+            <div id="podiumScore3" style="font-size: 1.05rem; margin-top: 6px;">0 pts</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; margin: 26px 0;">
+        <button id="btnExportCsv" class="btn btn-gold" style="font-size: 1.1rem;">
+          📥 Descargar Reporte Excel / CSV para RRHH
+        </button>
+        <button id="btnPlayAgain" class="btn btn-primary" style="font-size: 1.1rem;">
+          🔄 Jugar Nueva Partida
+        </button>
+      </div>
+
+      <div style="max-width: 820px; margin: 24px auto 0; text-align: left;">
+        <h3 style="margin-bottom: 12px; font-size: 1.2rem; color: #CBD5E1;">Resultados Completos de la Sesión:</h3>
+        <div id="podiumFullTable" class="leaderboard-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // ================= ESTADO Y CONFIGURACIÓN =================
+    let currentPin = localStorage.getItem('shalom_host_pin') || '';
+    let autoAdvanceEnabled = true;
+    let soundEnabled = true;
+    let lastPlayerCount = 0;
+    let room = null;
+
+    // Web Audio API
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+    function ensureAudio() {
+      if (!soundEnabled) return null;
+      if (!audioCtx) audioCtx = new AudioCtx();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+    function playTone(freq, duration = 0.12, type = 'sine', gainVal = 0.12, delay = 0) {
+      const ctx = ensureAudio();
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+      gain.gain.setValueAtTime(gainVal, ctx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + duration);
+    }
+    function playJoinSound() {
+      playTone(523.25, 0.1, 'triangle', 0.15, 0);
+      playTone(659.25, 0.16, 'triangle', 0.15, 0.09);
+    }
+    function playTickSound(timeRemaining) {
+      const pitch = timeRemaining <= 5 ? 880 : 440;
+      playTone(pitch, 0.07, 'sine', 0.1, 0);
+    }
+    function playRevealSound() {
+      playTone(392, 0.15, 'triangle', 0.16, 0);
+      playTone(523.25, 0.15, 'triangle', 0.16, 0.12);
+      playTone(659.25, 0.35, 'triangle', 0.18, 0.24);
+    }
+    function playPodiumSound() {
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+      notes.forEach((n, i) => playTone(n, 0.22, 'triangle', 0.18, i * 0.14));
+    }
+
+    // ================= MOTOR DE LA SALA (HOST AUTORITARIO) =================
+    function createNewRoom(mode = 'all') {
+      const allQs = window.SHALOM_QUESTIONS || [];
+      let selected = [...allQs];
+      if (mode === 'quick10') {
+        selected = [0, 1, 4, 6, 12, 13, 17, 20, 23, 27].map(i => allQs[i]).filter(Boolean);
+      } else if (mode === 'quick15') {
+        selected = [0, 1, 2, 4, 5, 6, 12, 13, 16, 17, 19, 20, 23, 27, 29].map(i => allQs[i]).filter(Boolean);
+      } else if (mode.startsWith('cat:')) {
+        const cat = mode.slice(4);
+        selected = allQs.filter(q => q.category === cat);
+      }
+
+      if (room && room.timer) clearInterval(room.timer);
+      if (room && room.autoTimer) clearInterval(room.autoTimer);
+
+      const pin = Math.floor(100000 + Math.random() * 900000).toString();
+      currentPin = pin;
+      localStorage.setItem('shalom_host_pin', pin);
+
+      room = {
+        pin,
+        state: 'LOBBY',
+        mode,
+        questions: selected,
+        currentQuestionIndex: -1,
+        questionStartTime: 0,
+        timeRemaining: 0,
+        autoCountdown: 0,
+        timer: null,
+        autoTimer: null,
+        players: new Map(),
+        currentAnswers: new Map()
+      };
+
+      updateQrAndDisplayUrl(pin);
+
+      // Inicia conexión realtime
+      window.shalomRealtime.initHost(pin, handlePlayerAction, (statusType, statusText) => {
+        const badge = document.getElementById('connectionBadge');
+        badge.textContent = statusText;
+        if (statusType === 'connected') {
+          badge.style.background = 'rgba(38, 137, 12, 0.2)';
+          badge.style.borderColor = '#26890C';
+        } else if (statusType === 'warning') {
+          badge.style.background = 'rgba(217, 119, 6, 0.2)';
+          badge.style.borderColor = '#D97706';
+        } else {
+          badge.style.background = 'rgba(255, 255, 255, 0.1)';
+          badge.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+        }
+      });
+
+      broadcastAndRender();
+    }
+
+    function updateQrAndDisplayUrl(pin) {
+      const currentUrl = new URL(window.location.href);
+      const playUrl = new URL('./play.html?pin=' + pin, currentUrl).href;
+      document.getElementById('joinUrlDisplay').textContent = playUrl;
+
+      try {
+        if (typeof window.qrcode === 'function') {
+          const qr = window.qrcode(0, 'M');
+          qr.addData(playUrl);
+          qr.make();
+          document.getElementById('qrImage').src = qr.createDataURL(5);
+        }
+      } catch (err) {
+        console.warn('QR render error:', err);
+      }
+    }
+
+    function getSerializablePayload() {
+      if (!room) return null;
+      const currentQ = room.currentQuestionIndex >= 0 && room.currentQuestionIndex < room.questions.length
+        ? room.questions[room.currentQuestionIndex]
+        : null;
+
+      const answerCounts = [0, 0, 0, 0];
+      if (room.state === 'RESULTS' && currentQ) {
+        for (const ans of room.currentAnswers.values()) {
+          if (ans.optionIndex >= 0 && ans.optionIndex < 4) answerCounts[ans.optionIndex]++;
+        }
+      }
+
+      const playersArr = Array.from(room.players.values())
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          dni: p.dni || '',
+          score: p.score,
+          streak: p.streak,
+          correctCount: p.correctCount,
+          hasAnswered: room.currentAnswers.has(p.id)
+        }))
+        .sort((a, b) => b.score - a.score);
+
+      return {
+        pin: room.pin,
+        state: room.state,
+        mode: room.mode,
+        autoAdvance: autoAdvanceEnabled,
+        autoCountdown: room.autoCountdown || 0,
+        totalQuestions: room.questions.length,
+        currentQuestionIndex: room.currentQuestionIndex,
+        timeRemaining: room.timeRemaining,
+        players: playersArr,
+        answeredCount: room.currentAnswers.size,
+        totalPlayers: room.players.size,
+        question: currentQ ? {
+          id: currentQ.id,
+          category: currentQ.category,
+          question: currentQ.question,
+          options: currentQ.options,
+          timeLimit: currentQ.timeLimit,
+          ...(room.state === 'RESULTS' ? {
+            correctIndex: currentQ.correctIndex,
+            explanation: currentQ.explanation,
+            answerCounts
+          } : {})
+        } : null
+      };
+    }
+
+    function broadcastAndRender() {
+      const payload = getSerializablePayload();
+      if (!payload) return;
+      renderState(payload);
+      window.shalomRealtime.hostBroadcastState(payload);
+    }
+
+    function handlePlayerAction(action) {
+      if (!room) return;
+      if (action.action === 'join') {
+        let p = room.players.get(action.playerId);
+        if (!p) {
+          p = {
+            id: action.playerId,
+            name: (action.name || 'Jugador').slice(0, 28),
+            dni: (action.dni || '').slice(0, 20),
+            score: 0,
+            streak: 0,
+            correctCount: 0,
+            connected: true
+          };
+          room.players.set(action.playerId, p);
+        } else {
+          p.name = action.name || p.name;
+          p.dni = action.dni || p.dni;
+          p.connected = true;
+        }
+        broadcastAndRender();
+      } else if (action.action === 'answer') {
+        if (room.state !== 'QUESTION') return;
+        const p = room.players.get(action.playerId);
+        if (!p || room.currentAnswers.has(p.id)) return;
+
+        const q = room.questions[room.currentQuestionIndex];
+        const elapsed = Math.max(0, Date.now() - room.questionStartTime);
+        const limitMs = (q.timeLimit || 20) * 1000;
+        const isCorrect = Number(action.optionIndex) === q.correctIndex;
+        let pts = 0;
+        if (isCorrect) {
+          const ratio = Math.max(0, Math.min(1, 1 - (elapsed / limitMs) * 0.5));
+          p.streak += 1;
+          pts = Math.round(1000 * ratio) + Math.min(p.streak - 1, 5) * 50;
+          p.score += pts;
+          p.correctCount += 1;
+        } else {
+          p.streak = 0;
+        }
+
+        room.currentAnswers.set(p.id, {
+          optionIndex: Number(action.optionIndex),
+          isCorrect,
+          pointsEarned: pts
+        });
+
+        document.getElementById('answeredCount').textContent = room.currentAnswers.size;
+        window.shalomRealtime.hostBroadcastTick({
+          timeRemaining: room.timeRemaining,
+          answeredCount: room.currentAnswers.size,
+          totalPlayers: room.players.size
+        });
+
+        // Si todos los jugadores respondieron, avanza de inmediato
+        if (room.players.size > 0 && room.currentAnswers.size >= room.players.size) {
+          setTimeout(finishCurrentQuestion, 350);
+        }
+      }
+    }
+
+    function clearAutoTimers() {
+      if (room && room.autoTimer) {
+        clearInterval(room.autoTimer);
+        room.autoTimer = null;
+      }
+      if (room) room.autoCountdown = 0;
+    }
+
+    function scheduleAutoTransition(seconds, callback) {
+      clearAutoTimers();
+      if (!autoAdvanceEnabled || !room) return;
+      room.autoCountdown = seconds;
+      updateAutoButtons(room.autoCountdown, room.state);
+
+      room.autoTimer = setInterval(() => {
+        if (!autoAdvanceEnabled || !room) {
+          clearAutoTimers();
+          return;
+        }
+        room.autoCountdown--;
+        if (room.autoCountdown <= 0) {
+          clearAutoTimers();
+          callback();
+        } else {
+          updateAutoButtons(room.autoCountdown, room.state);
+        }
+      }, 1000);
+    }
+
+    function updateAutoButtons(sec, st) {
+      if (st === 'RESULTS') {
+        document.getElementById('btnNextStep').textContent = (autoAdvanceEnabled && sec > 0) ? `Siguiente (${sec}s) →` : 'Siguiente →';
+      } else if (st === 'LEADERBOARD') {
+        document.getElementById('btnNextFromLb').textContent = (autoAdvanceEnabled && sec > 0) ? `Siguiente Pregunta (${sec}s) →` : 'Siguiente Pregunta →';
+      }
+    }
+
+    function finishCurrentQuestion() {
+      if (!room || room.state !== 'QUESTION') return;
+      if (room.timer) {
+        clearInterval(room.timer);
+        room.timer = null;
+      }
+      clearAutoTimers();
+
+      room.state = 'RESULTS';
+      room.timeRemaining = 0;
+      room.autoCountdown = autoAdvanceEnabled ? 6 : 0;
+      const q = room.questions[room.currentQuestionIndex];
+
+      for (const p of room.players.values()) {
+        if (!room.currentAnswers.has(p.id)) p.streak = 0;
+      }
+
+      const ranked = Array.from(room.players.values()).sort((a, b) => b.score - a.score);
+      for (const p of room.players.values()) {
+        const ans = room.currentAnswers.get(p.id);
+        const rank = ranked.findIndex(x => x.id === p.id) + 1;
+        const resultMsg = {
+          playerId: p.id,
+          isCorrect: ans ? ans.isCorrect : false,
+          pointsEarned: ans ? ans.pointsEarned : 0,
+          chosenIndex: ans ? ans.optionIndex : -1,
+          correctIndex: q.correctIndex,
+          correctText: q.options[q.correctIndex],
+          explanation: q.explanation,
+          totalScore: p.score,
+          streak: p.streak,
+          rank,
+          totalPlayers: ranked.length
+        };
+        window.shalomRealtime.hostBroadcastResult(resultMsg);
+      }
+
+      broadcastAndRender();
+      scheduleAutoTransition(6, () => showLeaderboardOrPodium());
+    }
+
+    function showLeaderboardOrPodium() {
+      if (!room) return;
+      clearAutoTimers();
+      if (room.currentQuestionIndex + 1 >= room.questions.length) {
+        room.state = 'PODIUM';
+        broadcastAndRender();
+      } else {
+        room.state = 'LEADERBOARD';
+        room.autoCountdown = autoAdvanceEnabled ? 4 : 0;
+        broadcastAndRender();
+        scheduleAutoTransition(4, () => startNextQuestion());
+      }
+    }
+
+    function startNextQuestion() {
+      if (!room) return;
+      if (room.timer) clearInterval(room.timer);
+      clearAutoTimers();
+
+      room.currentQuestionIndex++;
+      if (room.currentQuestionIndex >= room.questions.length) {
+        room.state = 'PODIUM';
+        broadcastAndRender();
+        return;
+      }
+
+      room.state = 'QUESTION';
+      room.currentAnswers.clear();
+      const q = room.questions[room.currentQuestionIndex];
+      room.timeRemaining = q.timeLimit || 20;
+      room.questionStartTime = Date.now();
+      broadcastAndRender();
+
+      room.timer = setInterval(() => {
+        room.timeRemaining--;
+        if (room.timeRemaining <= 0) {
+          finishCurrentQuestion();
+        } else {
+          document.getElementById('timerNumber').textContent = room.timeRemaining;
+          playTickSound(room.timeRemaining);
+          window.shalomRealtime.hostBroadcastTick({
+            timeRemaining: room.timeRemaining,
+            answeredCount: room.currentAnswers.size,
+            totalPlayers: room.players.size
+          });
+        }
+      }, 1000);
+    }
+
+    // ================= RENDERIZADO VISUAL =================
+    const viewLobby = document.getElementById('viewLobby');
+    const viewQuestion = document.getElementById('viewQuestion');
+    const viewLeaderboard = document.getElementById('viewLeaderboard');
+    const viewPodium = document.getElementById('viewPodium');
+
+    function renderState(state) {
+      document.getElementById('lobbyPin').textContent = state.pin;
+      document.getElementById('headerPinText').textContent = state.pin;
+      document.getElementById('headerPinBadge').style.display = 'inline-flex';
+      document.getElementById('totalQBadge').textContent = state.totalQuestions;
+
+      viewLobby.style.display = 'none';
+      viewQuestion.style.display = 'none';
+      viewLeaderboard.style.display = 'none';
+      viewPodium.style.display = 'none';
+
+      if (state.state === 'LOBBY') {
+        viewLobby.style.display = 'block';
+        document.getElementById('playerCountLobby').textContent = state.players.length;
+        if (state.players.length > lastPlayerCount) playJoinSound();
+        lastPlayerCount = state.players.length;
+
+        const listEl = document.getElementById('lobbyPlayersList');
+        if (state.players.length === 0) {
+          listEl.innerHTML = `<div style="color: #94A3B8; font-style: italic; padding: 14px 0;">Esperando participantes... Haz clic en «📱 Abrir Celular de Prueba» arriba o escanea el QR con tu móvil.</div>`;
+        } else {
+          listEl.innerHTML = state.players.map(p => `
+            <div class="player-chip">
+              <span>👤 ${escapeHtml(p.name)}</span>
+              ${p.dni ? `<span style="font-size:0.8rem; color:#94A3B8;">(${escapeHtml(p.dni)})</span>` : ''}
+            </div>
+          `).join('');
+        }
+      } else if (state.state === 'QUESTION' || state.state === 'RESULTS') {
+        viewQuestion.style.display = 'block';
+        const q = state.question;
+        document.getElementById('qCounterBadge').textContent = `Pregunta ${state.currentQuestionIndex + 1} de ${state.totalQuestions}`;
+        document.getElementById('qCategoryBadge').textContent = q.category;
+        document.getElementById('questionText').textContent = q.question;
+
+        q.options.forEach((optText, i) => {
+          document.getElementById(`optText${i}`).textContent = optText;
+          const card = document.getElementById(`optCard${i}`);
+          card.classList.remove('dimmed', 'correct-highlight');
+        });
+
+        if (state.state === 'QUESTION') {
+          document.getElementById('liveQuestionStats').style.display = 'flex';
+          document.getElementById('resultsBreakdown').style.display = 'none';
+          document.getElementById('btnSkipTimer').style.display = 'inline-flex';
+          document.getElementById('btnNextStep').style.display = 'none';
+          document.getElementById('timerNumber').textContent = state.timeRemaining;
+          document.getElementById('answeredCount').textContent = state.answeredCount;
+          document.getElementById('totalPlayersCount').textContent = state.totalPlayers;
+        } else {
+          playRevealSound();
+          document.getElementById('liveQuestionStats').style.display = 'none';
+          document.getElementById('resultsBreakdown').style.display = 'block';
+          document.getElementById('btnSkipTimer').style.display = 'none';
+          const btnNext = document.getElementById('btnNextStep');
+          btnNext.style.display = 'inline-flex';
+          btnNext.textContent = (autoAdvanceEnabled && state.autoCountdown > 0)
+            ? `Siguiente (${state.autoCountdown}s) →`
+            : 'Siguiente →';
+
+          const counts = q.answerCounts || [0, 0, 0, 0];
+          const maxCount = Math.max(1, ...counts);
+          for (let i = 0; i < 4; i++) {
+            document.getElementById(`barCount${i}`).textContent = counts[i];
+            const heightPx = Math.max(14, Math.round((counts[i] / maxCount) * 125));
+            document.getElementById(`barFill${i}`).style.height = `${heightPx}px`;
+            document.getElementById(`barCheck${i}`).textContent = i === q.correctIndex ? '✅' : '';
+
+            const card = document.getElementById(`optCard${i}`);
+            if (i === q.correctIndex) {
+              card.classList.add('correct-highlight');
+            } else {
+              card.classList.add('dimmed');
+            }
+          }
+          document.getElementById('explanationText').textContent = q.explanation || '';
+        }
+      } else if (state.state === 'LEADERBOARD') {
+        viewLeaderboard.style.display = 'block';
+        const btnLb = document.getElementById('btnNextFromLb');
+        btnLb.textContent = (autoAdvanceEnabled && state.autoCountdown > 0)
+          ? `Siguiente Pregunta (${state.autoCountdown}s) →`
+          : 'Siguiente Pregunta →';
+        const topPlayers = state.players.slice(0, 8);
+        document.getElementById('leaderboardContainer').innerHTML = topPlayers.length
+          ? topPlayers.map((p, idx) => `
+              <div class="lb-row">
+                <div style="display:flex; align-items:center;">
+                  <span class="lb-rank">${idx + 1}</span>
+                  <span>${escapeHtml(p.name)}</span>
+                  ${p.streak >= 2 ? `<span style="margin-left:10px; font-size:0.95rem; color:var(--shalom-gold);">🔥 Racha x${p.streak}</span>` : ''}
+                </div>
+                <div style="color: var(--shalom-gold);">${p.score} pts</div>
+              </div>
+            `).join('')
+          : `<div style="text-align:center; color:#94A3B8;">Aún no hay puntajes registrados.</div>`;
+      } else if (state.state === 'PODIUM') {
+        viewPodium.style.display = 'block';
+        playPodiumSound();
+
+        const p1 = state.players[0];
+        const p2 = state.players[1];
+        const p3 = state.players[2];
+
+        document.getElementById('podiumName1').textContent = p1 ? p1.name : '---';
+        document.getElementById('podiumScore1').textContent = p1 ? `${p1.score} pts (${p1.correctCount}/${state.totalQuestions})` : '0 pts';
+
+        document.getElementById('podiumName2').textContent = p2 ? p2.name : '---';
+        document.getElementById('podiumScore2').textContent = p2 ? `${p2.score} pts (${p2.correctCount}/${state.totalQuestions})` : '0 pts';
+
+        document.getElementById('podiumName3').textContent = p3 ? p3.name : '---';
+        document.getElementById('podiumScore3').textContent = p3 ? `${p3.score} pts (${p3.correctCount}/${state.totalQuestions})` : '0 pts';
+
+        document.getElementById('podiumFullTable').innerHTML = state.players.map((p, idx) => {
+          const pct = state.totalQuestions > 0 ? Math.round((p.correctCount / state.totalQuestions) * 100) : 0;
+          const badgeColor = pct >= 70 ? '#26890C' : '#D97706';
+          return `
+            <div class="lb-row" style="padding: 12px 18px; font-size: 1.05rem;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="lb-rank" style="width:34px; height:34px; font-size:0.95rem;">${idx + 1}</span>
+                <div>
+                  <div>${escapeHtml(p.name)}</div>
+                  <div style="font-size:0.8rem; color:#94A3B8;">DNI/Sede: ${escapeHtml(p.dni || '-')} | Correctas: ${p.correctCount}/${state.totalQuestions} (${pct}%)</div>
+                </div>
+              </div>
+              <div style="display:flex; align-items:center; gap:12px;">
+                <span style="background:${badgeColor}; padding:4px 10px; border-radius:99px; font-size:0.8rem;">${pct >= 70 ? 'APROBADO' : 'REFORZAR'}</span>
+                <span style="color:var(--shalom-gold);">${p.score} pts</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // Exportar CSV RRHH
+    function downloadCsvReport() {
+      if (!room) return;
+      const totalQ = room.questions.length || 35;
+      const ranked = Array.from(room.players.values()).sort((a, b) => b.score - a.score);
+      const rows = [
+        ['Puesto', 'Nombre y Apellidos', 'DNI / Sede', 'Puntaje Total', 'Respuestas Correctas', 'Total Preguntas', '% Aciertos', 'Condicion (Min 70%)']
+      ];
+      ranked.forEach((p, idx) => {
+        const pct = totalQ > 0 ? Math.round((p.correctCount / totalQ) * 100) : 0;
+        const status = pct >= 70 ? 'APROBADO' : 'POR REFORZAR';
+        rows.push([
+          idx + 1,
+          `"${String(p.name || '').replace(/"/g, '""')}"`,
+          `"${String(p.dni || '-').replace(/"/g, '""')}"`,
+          p.score,
+          p.correctCount,
+          totalQ,
+          `${pct}%`,
+          status
+        ]);
+      });
+      const csvContent = '\uFEFF' + rows.map(r => r.join(',')).join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Resultados_Induccion_Shalom_${room.pin}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    // ================= EVENTOS UI =================
+    document.getElementById('selectMode').addEventListener('change', (e) => {
+      createNewRoom(e.target.value);
+    });
+
+    document.getElementById('btnStartGame').addEventListener('click', () => {
+      ensureAudio();
+      startNextQuestion();
+    });
+
+    document.getElementById('btnSkipTimer').addEventListener('click', () => {
+      finishCurrentQuestion();
+    });
+
+    document.getElementById('btnNextStep').addEventListener('click', () => {
+      showLeaderboardOrPodium();
+    });
+
+    document.getElementById('btnNextFromLb').addEventListener('click', () => {
+      startNextQuestion();
+    });
+
+    document.getElementById('btnFinishEarly').addEventListener('click', () => {
+      if (room.timer) clearInterval(room.timer);
+      clearAutoTimers();
+      room.state = 'PODIUM';
+      broadcastAndRender();
+    });
+
+    document.getElementById('btnResetLobby').addEventListener('click', () => {
+      createNewRoom(document.getElementById('selectMode').value);
+    });
+
+    document.getElementById('btnPlayAgain').addEventListener('click', () => {
+      createNewRoom(document.getElementById('selectMode').value);
+    });
+
+    document.getElementById('btnExportCsv').addEventListener('click', () => {
+      downloadCsvReport();
+    });
+
+    document.getElementById('btnToggleAuto').addEventListener('click', () => {
+      autoAdvanceEnabled = !autoAdvanceEnabled;
+      const btn = document.getElementById('btnToggleAuto');
+      btn.textContent = autoAdvanceEnabled ? '🤖 Auto-Avance: ON' : '⏸ Auto-Avance: OFF';
+      btn.style.borderColor = autoAdvanceEnabled ? '#26890C' : 'rgba(255,255,255,0.2)';
+      btn.style.background = autoAdvanceEnabled ? 'rgba(38, 137, 12, 0.22)' : 'rgba(255,255,255,0.1)';
+      if (!autoAdvanceEnabled) clearAutoTimers();
+      else if (room && room.state === 'RESULTS') scheduleAutoTransition(6, () => showLeaderboardOrPodium());
+      else if (room && room.state === 'LEADERBOARD') scheduleAutoTransition(4, () => startNextQuestion());
+    });
+
+    document.getElementById('btnToggleSound').addEventListener('click', (e) => {
+      soundEnabled = !soundEnabled;
+      e.currentTarget.textContent = soundEnabled ? '🔊 Sonido: ON' : '🔇 Sonido: OFF';
+    });
+
+    document.getElementById('btnOpenTestPhone').addEventListener('click', () => {
+      window.open(`./play.html?pin=${currentPin}`, '_blank', 'width=430,height=780');
+    });
+
+    // Modal Supabase
+    const modalCloud = document.getElementById('modalCloud');
+    document.getElementById('btnConfigCloud').addEventListener('click', () => {
+      document.getElementById('inputSbUrl').value = window.SHALOM_CONFIG.supabaseUrl || '';
+      document.getElementById('inputSbKey').value = window.SHALOM_CONFIG.supabaseAnonKey || '';
+      modalCloud.style.display = 'flex';
+    });
+    document.getElementById('btnCloseModal').addEventListener('click', () => {
+      modalCloud.style.display = 'none';
+    });
+    document.getElementById('btnSaveCloudConfig').addEventListener('click', () => {
+      const u = document.getElementById('inputSbUrl').value.trim();
+      const k = document.getElementById('inputSbKey').value.trim();
+      window.SHALOM_CONFIG.save(u, k);
+      modalCloud.style.display = 'none';
+      window.shalomRealtime.initSupabaseClient();
+      createNewRoom(document.getElementById('selectMode').value);
+    });
+
+    function escapeHtml(str) {
+      return String(str || '').replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+
+    // Inicializar
+    createNewRoom('all');
+  </script>
+</body>
+</html>
